@@ -1125,7 +1125,9 @@ std::optional<fb2::Future<GenericError>> ServerFamily::Load(string_view load_pat
       else
         aggregated_result->first_error = load_result.error();
     };
-    load_fibers.push_back(proactor->LaunchFiber(std::move(load_func)));
+    load_fibers.push_back(proactor->LaunchFiber(
+        fb2::Launch::post, fb2::FixedStackAllocator(fb2::detail::default_stack_resource, 1U << 16),
+        "LoadRdb", std::move(load_func)));
   }
 
   fb2::Future<GenericError> future;

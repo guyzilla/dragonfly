@@ -369,25 +369,30 @@ error_code GcsSnapshotStorage::CheckPath(const std::string& path) {
 #ifdef WITH_AWS
 AwsS3SnapshotStorage::AwsS3SnapshotStorage(const std::string& endpoint, bool https,
                                            bool ec2_metadata, bool sign_payload) {
-  shard_set->pool()->GetNextProactor()->Await([&] {
-    if (!ec2_metadata) {
-      setenv("AWS_EC2_METADATA_DISABLED", "true", 0);
-    }
-    // S3ClientConfiguration may request configuration and credentials from
-    // EC2 metadata so must be run in a proactor thread.
-    Aws::S3::S3ClientConfiguration s3_conf{};
-    LOG(INFO) << "Creating AWS S3 client; region=" << s3_conf.region << "; https=" << std::boolalpha
-              << https << "; endpoint=" << endpoint;
-    if (!sign_payload) {
-      s3_conf.payloadSigningPolicy = Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::ForceNever;
-    }
-    std::shared_ptr<Aws::Auth::AWSCredentialsProvider> credentials_provider =
-        std::make_shared<aws::CredentialsProviderChain>();
-    // Pass a custom endpoint. If empty uses the S3 endpoint.
-    std::shared_ptr<Aws::S3::S3EndpointProviderBase> endpoint_provider =
-        std::make_shared<aws::S3EndpointProvider>(endpoint, https);
-    s3_ = std::make_shared<Aws::S3::S3Client>(credentials_provider, endpoint_provider, s3_conf);
-  });
+  if (!ec2_metadata) {
+    setenv("AWS_EC2_METADATA_DISABLED", "true", 0);
+  }
+
+  auto fb = shard_set->pool()->GetNextProactor()->LaunchFiber(
+      fb2::Launch::post, fb2::FixedStackAllocator(fb2::detail::default_stack_resource, 1U << 16),
+      "S3Client", [&] {
+        // S3ClientConfiguration may request configuration and credentials from
+        // EC2 metadata so must be run in a proactor thread.
+        Aws::S3::S3ClientConfiguration s3_conf{};
+        LOG(INFO) << "Creating AWS S3 client; region=" << s3_conf.region
+                  << "; https=" << std::boolalpha << https << "; endpoint=" << endpoint;
+        if (!sign_payload) {
+          s3_conf.payloadSigningPolicy =
+              Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::ForceNever;
+        }
+        std::shared_ptr<Aws::Auth::AWSCredentialsProvider> credentials_provider =
+            std::make_shared<aws::CredentialsProviderChain>();
+        // Pass a custom endpoint. If empty uses the S3 endpoint.
+        std::shared_ptr<Aws::S3::S3EndpointProviderBase> endpoint_provider =
+            std::make_shared<aws::S3EndpointProvider>(endpoint, https);
+        s3_ = std::make_shared<Aws::S3::S3Client>(credentials_provider, endpoint_provider, s3_conf);
+      });
+  fb.Join();
 }
 
 io::Result<std::pair<io::Sink*, uint8_t>, GenericError> AwsS3SnapshotStorage::OpenWriteFile(
