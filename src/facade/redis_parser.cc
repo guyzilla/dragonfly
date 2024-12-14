@@ -28,8 +28,8 @@ auto RedisParser::Parse(Buffer str, uint32_t* consumed, RespExpr::Vec* res) -> R
         return BAD_ARRAYLEN;
       }
       if (str.empty())
-        return INPUT_PENDING;
-    }
+    return INPUT_PENDING;
+  }
   } else {  // INLINE mode, aka PING\n
     // We continue parsing in the middle.
     if (!cached_expr_)
@@ -53,7 +53,7 @@ auto RedisParser::Parse(Buffer str, uint32_t* consumed, RespExpr::Vec* res) -> R
         state_ = PARSE_ARG_S;
         break;
       case PARSE_ARG_S:
-        resultc = ParseArg(str);
+          resultc = ParseArg(str);
         break;
       case INLINE_S:
         DCHECK(parse_stack_.empty());
@@ -121,7 +121,7 @@ bool RedisParser::InitStart(char prefix_b, RespExpr::Vec* res) {
       return true;
   }
 
-  state_ = INLINE_S;
+      state_ = INLINE_S;
   return false;
 }
 
@@ -184,16 +184,16 @@ auto RedisParser::ParseInline(Buffer str) -> ResultConsumed {
     if (ptr == end) {
       return {INPUT_PENDING, ptr - token_start};
     }
-    is_broken_token_ = false;
-  }
+      is_broken_token_ = false;
+    }
 
   while (ptr != end) {
     // For inline input we only require \n.
     if (*ptr == '\n') {
       if (cached_expr_->empty()) {
-        ++ptr;
+      ++ptr;
         continue;  // skip empty line
-      }
+    }
       break;
     }
 
@@ -213,7 +213,7 @@ auto RedisParser::ParseInline(Buffer str) -> ResultConsumed {
   }
 
   uint32_t last_consumed = ptr - str.data();
-  if (ptr == end) {                   // we have not finished parsing.
+  if (ptr == end) {  // we have not finished parsing.
     is_broken_token_ = ptr[-1] > 32;  // we stopped in the middle of the token.
     return {INPUT_PENDING, last_consumed};
   }
